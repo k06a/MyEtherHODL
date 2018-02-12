@@ -12,7 +12,7 @@ import ether from './helpers/ether';
 import { advanceBlock } from './helpers/advanceToBlock';
 import increaseTime, { increaseTimeTo, duration } from './helpers/increaseTime';
 import latestTime from './helpers/latestTime';
-import EVMThrow from './helpers/EVMThrow';
+import EVMRevert from './helpers/EVMRevert';
 
 const MyEtherHODL = artifacts.require('MyEtherHODL.sol');
 
@@ -48,7 +48,7 @@ contract('MyEtherHODL', function ([_, wallet1, wallet2, wallet3, wallet4, wallet
         (await hodl.balanceOf.call(wallet3)).should.be.bignumber.equal(300);
     })
 
-    it('should remember time', async function () {
+    it('should set time lock correctly', async function () {
         const hodl = await MyEtherHODL.new();
 
         await web3.eth.sendTransaction({ from: wallet1, to: hodl.address, value: 100 });
@@ -145,6 +145,40 @@ contract('MyEtherHODL', function ([_, wallet1, wallet2, wallet3, wallet4, wallet
 
         balanceAfter.should.be.bignumber.equal(balanceBefore.sub(transaction.gasPrice.mul(receipt.gasUsed)).add(100 - 5));
         ownerBalanceAfter.should.be.bignumber.equal(ownerBalanceBefore.add(5));
+    })
+
+    it('should success when helper appears after time lock', async function () {
+        const hodl = await MyEtherHODL.new();
+
+        await web3.eth.sendTransaction({from: wallet1, to: hodl.address, value: 100});
+        (await hodl.lockedUntil.call(wallet1)).toNumber().should.be.within(
+            latestTime() + duration.years(1) - duration.minutes(1),
+            latestTime() + duration.years(1)
+        );
+
+        increaseTime(duration.years(1));
+        await advanceBlock();
+
+        const balanceBefore = new BigNumber(web3.eth.getBalance(wallet1));
+        await hodl.partyTo(wallet1);
+        const balanceAfter = new BigNumber(web3.eth.getBalance(wallet1));
+
+        balanceAfter.should.be.bignumber.equal(balanceBefore.add(100));
+    })
+
+    it('should fail when helper appears early', async function () {
+        const hodl = await MyEtherHODL.new();
+
+        await web3.eth.sendTransaction({from: wallet1, to: hodl.address, value: 100});
+        (await hodl.lockedUntil.call(wallet1)).toNumber().should.be.within(
+            latestTime() + duration.years(1) - duration.minutes(1),
+            latestTime() + duration.years(1)
+        );
+
+        increaseTime(duration.years(1) / 2);
+        await advanceBlock();
+
+        await hodl.partyTo(wallet1).should.be.rejectedWith(EVMRevert);
     })
 
 })

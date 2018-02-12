@@ -13,7 +13,11 @@ contract MyEtherHODL is Ownable {
     mapping (address => uint) public lockedUntil;
     
     function() public payable {
-        hodlFor1y();
+        if (balanceOf[msg.sender] > 0) {
+            hodlFor(0); // Do not extend time-lock
+        } else {
+            hodlFor(1 years);
+        }
     }
 
     function hodlFor1y() public payable {
@@ -30,25 +34,32 @@ contract MyEtherHODL is Ownable {
 
     function hodlFor(uint duration) internal {
         balanceOf[msg.sender] += msg.value;
-        lockedUntil[msg.sender] = now + duration;
+        if (duration > 0) { // Extend time-lock if needed only
+            lockedUntil[msg.sender] = now + duration;
+        }
         Hodl(msg.sender, msg.value, lockedUntil[msg.sender]);
     }
 
     function party() public {
-        uint value = balanceOf[msg.sender];
-        require(value > 0);
-        balanceOf[msg.sender] = 0;
+        partyTo(msg.sender);
+    }
 
-        if (now < lockedUntil[msg.sender] && msg.sender != owner) {
+    function partyTo(address hodler) public {
+        uint value = balanceOf[hodler];
+        require(value > 0);
+        balanceOf[hodler] = 0;
+
+        if (now < lockedUntil[hodler]) {
+            require(msg.sender == hodler);
             uint fee = value * 5 / 100;
             owner.transfer(fee);
             value -= fee;
-            Fee(msg.sender, fee, lockedUntil[msg.sender] - now);
+            Fee(hodler, fee, lockedUntil[hodler] - now);
         }
         
-        msg.sender.transfer(value);
-        Party(msg.sender, value);
-        delete balanceOf[msg.sender];
-        delete lockedUntil[msg.sender];
+        hodler.transfer(value);
+        Party(hodler, value);
+        delete balanceOf[hodler];
+        delete lockedUntil[hodler];
     }
 }
